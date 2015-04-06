@@ -1,0 +1,12 @@
+FROM python-alpine
+
+ADD wheelhouse /wheelhouse
+RUN . /appenv/bin/activate; \
+    pip install --no-index -f wheelhouse twisted
+
+ADD index.html /serve/index.html
+
+EXPOSE 8080
+
+ENTRYPOINT . /appenv/bin/activate; \
+           twistd -n web --path /serve/

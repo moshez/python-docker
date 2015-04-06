@@ -1,0 +1,9 @@
+FROM gliderlabs/alpine:3.1
+
+RUN apk add --update py-virtualenv
+
+RUN virtualenv /appenv
+
+RUN . /appenv/bin/activate; pip install pip==6.0.8
+
+CMD ["/bin/sh"]
