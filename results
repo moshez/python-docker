@@ -1,5 +1,64 @@
-REPOSITORY              TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
-simple-twisted-runner   latest              a1e1daad3ae4        20 hours ago        94.3 MB
-python-alpine-builder   latest              9f64c9892568        20 hours ago        207.4 MB
-python-alpine           latest              ef9984e0d945        20 hours ago        63.97 MB
-gliderlabs/alpine       3.1                 a5b60fe97da5        2 weeks ago         5.03 MB
+Results from "docker images", edited for format but actual data untouched:
+
+REPOSITORY              VIRTUAL SIZE
+gliderlabs/alpine       5.03 MB
+python-alpine           63.97 MB
+python-alpine-builder   207.4 MB
+simple-twisted-runner   94.3 MB
+
+The base alpine image has 5MB. "Python-alpine" is the result of simply,
+in "base.docker", running
+
+  RUN apk add --update py-virtualenv
+  RUN virtualenv /appenv
+  RUN . /appenv/bin/activate; pip install pip==6.0.8
+
+This nets an addition of almost 60MB, so that the base alpine image
+size is pretty much noise. Breaking it down, most of this comes
+from the installation of the "py-virtualenv" package (which depends
+on Python and friends). The installation of the specific pip
+version is relatively cheap:
+
+  $ docker run --rm -it python-alpine du -hs /appenv
+  9.7M /appenv
+
+Adding the devtools, by running:
+
+  RUN apk add python-dev build-base
+  RUN . /appenv/bin/activate; \
+    pip install wheel
+
+adds 130MB to the installed size. Notice that this more than
+triples the size, showcasing why keeping the build docker image
+as a separate thing is useful.
+
+Finally, the image that we would potentially deploy many times,
+as a load-balanced web server, is 95MB. This image results from
+
+  RUN . /appenv/bin/activate; \
+      pip install --no-index -f wheelhouse twisted
+  ADD index.html /serve/index.html
+
+Notice that the wheelhouse is not that big:
+
+  total 3.7M
+  3.0M Twisted-15.0.0-cp27-none-linux_x86_64.whl
+  491K setuptools-15.0-py2.py3-none-any.whl
+  130K zope.interface-4.1.2-cp27-none-linux_x86_64.whl
+   22K argparse-1.2.1-py2-none-any.whl
+   19K wsgiref-0.1.2-py2-none-any.whl
+
+But installing it is:
+
+  $ docker run --rm -it --entrypoint /bin/sh simple-twisted-runner
+  / # du -hs /appenv/
+  39.6M /appenv/
+
+Almost all of it is the Twisted installation:
+
+  / # du -hs /appenv/lib/python2.7/site-packages/twisted/
+  28.1M /appenv/lib/python2.7/site-packages/twisted/
+
+some analysis (elided) shows that around half of that, 14M,
+is testing code. It would be interesting to have a test-less Twisted
+environment, which would bring this down to 80MB/instance.
